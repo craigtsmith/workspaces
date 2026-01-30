@@ -52,7 +52,11 @@ echo
 FAILED=()
 for name in "${TEMPLATES[@]}"; do
     echo "=== $name ==="
-    if "$SCRIPT_DIR/push.sh" "$name" $YES_FLAG; then
+    PUSH_ARGS=("$name")
+    if [[ -n "$YES_FLAG" ]]; then
+        PUSH_ARGS+=("$YES_FLAG")
+    fi
+    if "$SCRIPT_DIR/push.sh" "${PUSH_ARGS[@]}"; then
         echo
     else
         FAILED+=("$name")
