@@ -29,8 +29,11 @@ A multi-template repository for managing remote workspace templates with Docker-
 # List available templates
 ./scripts/list.sh
 
-# Push a template to Coder
-./scripts/push.sh default
+# Load secrets from .envrc and push devbox
+./scripts/push.sh devbox
+
+# Push the project template
+./scripts/push.sh project
 
 # Validate all templates
 ./scripts/validate.sh
@@ -43,7 +46,8 @@ A multi-template repository for managing remote workspace templates with Docker-
 
 | Template | Description |
 |----------|-------------|
-| `default` | Full-featured workspace with DinD, Node.js, Python, Bun, and IDE integrations |
+| `devbox` | Personal workstation with Docker, AI helpers (Claude Code, Codex, Mux), Cursor/code-server, dotfiles, and personalization hooks |
+| `project` | Project-centric template that clones a repo, boots devcontainers, wires Cursor/code-server + AI agents, and is ready for agent workspaces |
 
 See individual template READMEs in `templates/<name>/README.md` for details.
 
@@ -54,7 +58,7 @@ See individual template READMEs in `templates/<name>/README.md` for details.
 ./scripts/init.sh my-template
 
 # Copy from existing template
-./scripts/init.sh gpu --from default
+./scripts/init.sh gpu --from devbox
 ```
 
 Then customize `templates/my-template/main.tf` and push:
