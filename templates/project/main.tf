@@ -339,8 +339,8 @@ module "claude-code" {
   agent_id       = coder_agent.main.id
   workdir        = "${local.home_dir}/projects"
   claude_api_key = local.anthropic_api_key
-  ai_prompt      = local.claude_ai_prompt
-  report_tasks   = data.coder_task.me.enabled
+  ai_prompt      = ""
+  report_tasks   = false
   system_prompt  = data.coder_parameter.system_prompt.value
   order          = 10
 }
