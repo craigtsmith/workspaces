@@ -178,13 +178,7 @@ resource "coder_agent" "main" {
 
     if [ ! -f ~/personalize ]; then
       cat <<'PERSONALIZE' > ~/personalize
-#!/usr/bin/env bash
-if command -v zsh >/dev/null 2>&1; then
-  zsh_path="$(command -v zsh)"
-  if [ "$SHELL" != "$zsh_path" ]; then
-    chsh -s "$zsh_path" "$USER" || sudo chsh -s "$zsh_path" "$USER" || sudo usermod -s "$zsh_path" "$USER" || true
-  fi
-fi
+${file("${path.module}/personalize")}
 PERSONALIZE
       chmod +x ~/personalize
     fi
@@ -322,6 +316,8 @@ module "claude-code" {
   version             = "~> 4.0"
   agent_id            = coder_agent.main.id
   workdir             = "${local.home_dir}/Projects"
+  claude_api_key      = local.anthropic_api_key
+  report_tasks        = false
   install_claude_code = true
   order               = 3
 }
@@ -336,12 +332,13 @@ module "mux" {
 }
 
 module "codex" {
-  count    = data.coder_workspace.me.start_count
-  source   = "registry.coder.com/coder-labs/codex/coder"
-  version  = "~> 1.0"
-  agent_id = coder_agent.main.id
-  folder   = "${local.home_dir}/Projects"
-  order    = 5
+  count          = data.coder_workspace.me.start_count
+  source         = "registry.coder.com/coder-labs/codex/coder"
+  version        = "~> 1.0"
+  agent_id       = coder_agent.main.id
+  folder         = "${local.home_dir}/Projects"
+  openai_api_key = local.openai_api_key
+  order          = 5
 }
 
 #------------------------------------------------------------------------------

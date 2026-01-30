@@ -201,13 +201,7 @@ resource "coder_agent" "main" {
 
     if [ ! -f ~/personalize ]; then
       cat <<'PERSONALIZE' > ~/personalize
-#!/usr/bin/env bash
-if command -v zsh >/dev/null 2>&1; then
-  zsh_path="$(command -v zsh)"
-  if [ "$SHELL" != "$zsh_path" ]; then
-    chsh -s "$zsh_path" "$USER" || sudo chsh -s "$zsh_path" "$USER" || sudo usermod -s "$zsh_path" "$USER" || true
-  fi
-fi
+${file("${path.module}/personalize")}
 PERSONALIZE
       chmod +x ~/personalize
     fi
@@ -339,14 +333,16 @@ module "cursor" {
 #------------------------------------------------------------------------------
 
 module "claude-code" {
-  count         = data.coder_workspace.me.start_count
-  source        = "registry.coder.com/coder/claude-code/coder"
-  version       = "~> 4.0"
-  agent_id      = coder_agent.main.id
-  workdir       = "${local.home_dir}/projects"
-  ai_prompt     = local.claude_ai_prompt
-  system_prompt = data.coder_parameter.system_prompt.value
-  order         = 10
+  count          = data.coder_workspace.me.start_count
+  source         = "registry.coder.com/coder/claude-code/coder"
+  version        = "~> 4.0"
+  agent_id       = coder_agent.main.id
+  workdir        = "${local.home_dir}/projects"
+  claude_api_key = local.anthropic_api_key
+  ai_prompt      = local.claude_ai_prompt
+  report_tasks   = data.coder_task.me.enabled
+  system_prompt  = data.coder_parameter.system_prompt.value
+  order          = 10
 }
 
 module "mux" {
@@ -359,12 +355,13 @@ module "mux" {
 }
 
 module "codex" {
-  count    = data.coder_workspace.me.start_count
-  source   = "registry.coder.com/coder-labs/codex/coder"
-  version  = "~> 1.0"
-  agent_id = coder_agent.main.id
-  folder   = "${local.home_dir}/projects"
-  order    = 12
+  count          = data.coder_workspace.me.start_count
+  source         = "registry.coder.com/coder-labs/codex/coder"
+  version        = "~> 1.0"
+  agent_id       = coder_agent.main.id
+  folder         = "${local.home_dir}/projects"
+  openai_api_key = local.openai_api_key
+  order          = 12
 }
 
 #------------------------------------------------------------------------------
