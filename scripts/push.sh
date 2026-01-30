@@ -64,4 +64,24 @@ if [[ ! -f "$TEMPLATE_DIR/main.tf" ]]; then
 fi
 
 echo "Pushing template: $TEMPLATE_NAME"
-coder templates push --directory "$TEMPLATE_DIR" $YES_FLAG "$TEMPLATE_NAME"
+
+PUSH_ARGS=()
+if [[ -n "$YES_FLAG" ]]; then
+    PUSH_ARGS+=("$YES_FLAG")
+fi
+
+anthropic_value="${TF_VAR_anthropic_api_key:-${ANTHROPIC_API_KEY:-}}"
+if [[ -n "$anthropic_value" ]]; then
+    PUSH_ARGS+=(--variable "anthropic_api_key=$anthropic_value")
+fi
+
+openai_value="${TF_VAR_openai_api_key:-${OPENAI_API_KEY:-}}"
+if [[ -n "$openai_value" ]]; then
+    PUSH_ARGS+=(--variable "openai_api_key=$openai_value")
+fi
+
+if [[ -n "${TF_VAR_enable_github_auth:-}" ]]; then
+    PUSH_ARGS+=(--variable "enable_github_auth=${TF_VAR_enable_github_auth}")
+fi
+
+coder templates push --directory "$TEMPLATE_DIR" "${PUSH_ARGS[@]}" "$TEMPLATE_NAME"
