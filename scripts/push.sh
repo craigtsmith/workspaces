@@ -57,5 +57,4 @@ if [[ ! -f "$TEMPLATE_DIR/main.tf" ]]; then
 fi
 
 echo "Pushing template: $TEMPLATE_NAME"
-cd "$TEMPLATE_DIR"
-coder templates push $YES_FLAG "$TEMPLATE_NAME"
+coder templates push --directory "$TEMPLATE_DIR" $YES_FLAG "$TEMPLATE_NAME"
