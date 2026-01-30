@@ -174,10 +174,11 @@ resource "coder_agent" "main" {
 #------------------------------------------------------------------------------
 
 module "dotfiles" {
-  count    = data.coder_workspace.me.start_count
-  source   = "registry.coder.com/coder/dotfiles/coder"
-  version  = "1.0.29"
-  agent_id = coder_agent.main.id
+  count                = data.coder_workspace.me.start_count
+  source               = "registry.coder.com/coder/dotfiles/coder"
+  version              = "1.0.29"
+  agent_id             = coder_agent.main.id
+  default_dotfiles_uri = "https://github.com/craigtsmith/dotfiles"
 }
 
 #------------------------------------------------------------------------------

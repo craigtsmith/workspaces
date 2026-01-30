@@ -16,31 +16,10 @@ o.  )88b  888   888 d8(  888  888   .o8 888    .o o.  )88b
                                                            
 ```
 
-A multi-template repository for managing [Coder](https://coder.com) workspace templates with Docker-based development environments.
-
-## Directory Structure
-
-```
-workspaces/
-├── templates/              # Coder templates
-│   └── default/            # Default workspace template
-│       ├── main.tf
-│       └── build/
-├── scripts/                # CLI tooling
-│   ├── list.sh             # List templates
-│   ├── push.sh             # Push single template
-│   ├── push-all.sh         # Push all templates
-│   ├── pull.sh             # Pull from Coder
-│   ├── validate.sh         # Validate configs
-│   ├── fmt.sh              # Format TF files
-│   └── init.sh             # Create new template
-└── shared/
-    └── modules/            # Shared Terraform modules
-```
+A multi-template repository for managing remote workspace templates with Docker-based development environments.
 
 ## Prerequisites
 
-- [Coder CLI](https://coder.com/docs/cli) - authenticated with `coder login`
 - [OpenTofu](https://opentofu.org/) or [Terraform](https://terraform.io/)
 - [Docker](https://docker.com/) (for building workspace images)
 
@@ -98,36 +77,3 @@ Then customize `templates/my-template/main.tf` and push:
 | `init.sh` | Create new template | `./scripts/init.sh <name> [--from <src>]` |
 
 All scripts prefer `tofu` over `terraform` if available.
-
-## CI/CD Integration
-
-Example GitHub Actions workflow:
-
-```yaml
-name: Validate Templates
-
-on:
-  pull_request:
-    paths:
-      - 'templates/**'
-
-jobs:
-  validate:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: opentofu/setup-opentofu@v1
-
-      - name: Check formatting
-        run: ./scripts/fmt.sh --check
-
-      - name: Validate templates
-        run: ./scripts/validate.sh
-```
-
-## Resources
-
-- [Coder Templates Documentation](https://coder.com/docs/templates)
-- [Coder Module Registry](https://registry.coder.com/)
-- [Terraform Docker Provider](https://registry.terraform.io/providers/kreuzwerker/docker/latest/docs)
