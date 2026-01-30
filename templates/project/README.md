@@ -10,21 +10,16 @@ Project-specific workspace with AI agent tasks support and devcontainer integrat
 - **AI Agents**: Claude Code (with task reporting), Mux, Codex
 - **Devcontainers**: Automatic devcontainer detection and startup
 - **AI Tasks**: Supports Coder agent tasks via `coder_ai_task`
+- **Personalization**: personalize module pre-installs zsh and seeds a `~/personalize` script
 
 ## Parameters
 
 | Parameter | Description |
 |-----------|-------------|
-| `user_type` | Human or Agent (configures git identity) |
 | `repo_url` | Repository to clone (should contain devcontainer.json) |
 | `system_prompt` | System prompt for AI agents |
-
-### Git Identity by User Type
-
-| User Type | Name | Email |
-|-----------|------|-------|
-| Human | craig t smith | craigtsmith@users.noreply.github.com |
-| Agent | agent smith | craigts-agent@users.noreply.github.com |
+| `anthropic_api_key` | Optional workspace override; leave blank to use `.envrc` value |
+| `openai_api_key` | Optional workspace override; leave blank to use `.envrc` value |
 
 ## Template Variables
 
@@ -32,8 +27,17 @@ Set these when pushing the template:
 
 | Variable | Description |
 |----------|-------------|
-| `anthropic_api_key` | Anthropic API key for Claude Code |
-| `openai_api_key` | OpenAI API key for Codex |
+| `anthropic_api_key` | Anthropic API key for Claude Code (default sourced from `.envrc`) |
+| `openai_api_key` | OpenAI API key for Codex (default sourced from `.envrc`) |
+| `enable_github_auth` | Set to `false` if GitHub external auth/SSH upload is not configured |
+
+> The template prompts for Anthropic/OpenAI keys at workspace creation; leave them blank to use the values sourced from `.envrc` during `./scripts/push.sh`.
+
+## GitHub integration
+
+- [`git-config`](https://registry.coder.com/modules/coder/git-config) syncs Git author/email from your Coder user.
+- [`github-upload-public-key`](https://registry.coder.com/modules/coder/github-upload-public-key) uploads SSH keys via GitHub external auth so clones work immediately.
+- Run separate Coder accounts for each agent if you need distinct Git identities or GitHub tokens.
 
 ## Volumes
 
@@ -46,14 +50,12 @@ Set these when pushing the template:
 # Push template
 ./scripts/push.sh project
 
-# Create workspace for human use
+# Create workspace and provide repo url
 coder create my-project --template project \
-  --parameter user_type=human \
   --parameter repo_url=https://github.com/org/repo
 
-# Create workspace for agent tasks
+# Override the system prompt (optional)
 coder create agent-project --template project \
-  --parameter user_type=agent \
   --parameter repo_url=https://github.com/org/repo \
   --parameter system_prompt="You are a coding assistant for this project..."
 ```

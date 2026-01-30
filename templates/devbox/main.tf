@@ -17,9 +17,73 @@ data "coder_provisioner" "me" {}
 data "coder_workspace" "me" {}
 data "coder_workspace_owner" "me" {}
 
+data "coder_external_auth" "github" {
+  count = var.enable_github_auth ? 1 : 0
+  id    = "github"
+}
+
 locals {
-  username = data.coder_workspace_owner.me.name
-  home_dir = "/home/coder"
+  username                = data.coder_workspace_owner.me.name
+  home_dir                = "/home/coder"
+  anthropic_api_key       = trimspace(data.coder_parameter.anthropic_api_key.value)
+  openai_api_key          = trimspace(data.coder_parameter.openai_api_key.value)
+  github_external_auth_id = try(data.coder_external_auth.github[0].id, null)
+
+  agent_metadata = [
+    {
+      display_name = "CPU Usage"
+      key          = "0_cpu_usage"
+      script       = "coder stat cpu"
+      interval     = 10
+      timeout      = 1
+    },
+    {
+      display_name = "RAM Usage"
+      key          = "1_ram_usage"
+      script       = "coder stat mem"
+      interval     = 10
+      timeout      = 1
+    },
+    {
+      display_name = "Home Disk"
+      key          = "3_home_disk"
+      script       = "coder stat disk --path $${HOME}"
+      interval     = 60
+      timeout      = 1
+    },
+    {
+      display_name = "CPU Usage (Host)"
+      key          = "4_cpu_usage_host"
+      script       = "coder stat cpu --host"
+      interval     = 10
+      timeout      = 1
+    },
+    {
+      display_name = "Memory Usage (Host)"
+      key          = "5_mem_usage_host"
+      script       = "coder stat mem --host"
+      interval     = 10
+      timeout      = 1
+    },
+    {
+      display_name = "Load Average (Host)"
+      key          = "6_load_host"
+      script       = <<-EOT
+        echo "`cat /proc/loadavg | awk '{ print $1 }'` `nproc`" | awk '{ printf "%0.2f", $1/$2 }'
+      EOT
+      interval     = 60
+      timeout      = 1
+    },
+    {
+      display_name = "Swap Usage (Host)"
+      key          = "7_swap_host"
+      script       = <<-EOT
+        free -b | awk '/^Swap/ { printf("%.1f/%.1f", $3/1024.0/1024.0/1024.0, $2/1024.0/1024.0/1024.0) }'
+      EOT
+      interval     = 10
+      timeout      = 1
+    }
+  ]
 }
 
 #------------------------------------------------------------------------------
@@ -40,6 +104,12 @@ variable "openai_api_key" {
   sensitive   = true
 }
 
+variable "enable_github_auth" {
+  type        = bool
+  description = "Enable GitHub external auth integration (git-config + SSH key upload)."
+  default     = true
+}
+
 #------------------------------------------------------------------------------
 # PARAMETERS
 #------------------------------------------------------------------------------
@@ -50,6 +120,24 @@ data "coder_parameter" "git_repo_url" {
   display_name = "Git Repository URL"
   description  = "Repository to clone into ~/Projects (optional)"
   default      = ""
+  mutable      = true
+}
+
+data "coder_parameter" "anthropic_api_key" {
+  type         = "string"
+  name         = "anthropic_api_key"
+  display_name = "Anthropic API key"
+  description  = "Override the push-time value (optional)"
+  default      = var.anthropic_api_key
+  mutable      = true
+}
+
+data "coder_parameter" "openai_api_key" {
+  type         = "string"
+  name         = "openai_api_key"
+  display_name = "OpenAI API key"
+  description  = "Override the push-time value (optional)"
+  default      = var.openai_api_key
   mutable      = true
 }
 
@@ -70,9 +158,26 @@ resource "coder_agent" "main" {
       touch ~/.init_done
     fi
     mkdir -p ~/Projects ~/.claude
-    
+
     # Remove oh-my-zsh devcontainer (installed by dotfiles, not wanted)
     rm -rf ~/.oh-my-zsh/.devcontainer
+
+    if ! command -v zsh >/dev/null 2>&1; then
+      sudo apt-get update -y
+      sudo apt-get install -y zsh
+    fi
+
+    if [ ! -f ~/personalize ]; then
+      cat <<'PERSONALIZE' > ~/personalize
+#!/usr/bin/env bash
+if command -v zsh >/dev/null 2>&1; then
+  if [ "$SHELL" != "$(command -v zsh)" ]; then
+    chsh -s "$(command -v zsh)" "$USER" || sudo chsh -s "$(command -v zsh)" "$USER" || true
+  fi
+fi
+PERSONALIZE
+      chmod +x ~/personalize
+    fi
   EOT
 
   shutdown_script = <<-EOT
@@ -87,64 +192,15 @@ resource "coder_agent" "main" {
     GIT_COMMITTER_EMAIL = data.coder_workspace_owner.me.email
   }
 
-  metadata {
-    display_name = "CPU Usage"
-    key          = "0_cpu_usage"
-    script       = "coder stat cpu"
-    interval     = 10
-    timeout      = 1
-  }
-
-  metadata {
-    display_name = "RAM Usage"
-    key          = "1_ram_usage"
-    script       = "coder stat mem"
-    interval     = 10
-    timeout      = 1
-  }
-
-  metadata {
-    display_name = "Home Disk"
-    key          = "3_home_disk"
-    script       = "coder stat disk --path $${HOME}"
-    interval     = 60
-    timeout      = 1
-  }
-
-  metadata {
-    display_name = "CPU Usage (Host)"
-    key          = "4_cpu_usage_host"
-    script       = "coder stat cpu --host"
-    interval     = 10
-    timeout      = 1
-  }
-
-  metadata {
-    display_name = "Memory Usage (Host)"
-    key          = "5_mem_usage_host"
-    script       = "coder stat mem --host"
-    interval     = 10
-    timeout      = 1
-  }
-
-  metadata {
-    display_name = "Load Average (Host)"
-    key          = "6_load_host"
-    script       = <<EOT
-      echo "`cat /proc/loadavg | awk '{ print $1 }'` `nproc`" | awk '{ printf "%0.2f", $1/$2 }'
-    EOT
-    interval     = 60
-    timeout      = 1
-  }
-
-  metadata {
-    display_name = "Swap Usage (Host)"
-    key          = "7_swap_host"
-    script       = <<EOT
-      free -b | awk '/^Swap/ { printf("%.1f/%.1f", $3/1024.0/1024.0/1024.0, $2/1024.0/1024.0/1024.0) }'
-    EOT
-    interval     = 10
-    timeout      = 1
+  dynamic "metadata" {
+    for_each = local.agent_metadata
+    content {
+      display_name = metadata.value.display_name
+      key          = metadata.value.key
+      script       = metadata.value.script
+      interval     = metadata.value.interval
+      timeout      = metadata.value.timeout
+    }
   }
 }
 
@@ -166,17 +222,17 @@ resource "coder_script" "docker_init" {
 #------------------------------------------------------------------------------
 
 resource "coder_env" "anthropic_api_key" {
-  count    = var.anthropic_api_key != "" ? 1 : 0
+  count    = local.anthropic_api_key != "" ? 1 : 0
   agent_id = coder_agent.main.id
   name     = "ANTHROPIC_API_KEY"
-  value    = var.anthropic_api_key
+  value    = local.anthropic_api_key
 }
 
 resource "coder_env" "openai_api_key" {
-  count    = var.openai_api_key != "" ? 1 : 0
+  count    = local.openai_api_key != "" ? 1 : 0
   agent_id = coder_agent.main.id
   name     = "OPENAI_API_KEY"
-  value    = var.openai_api_key
+  value    = local.openai_api_key
 }
 
 #------------------------------------------------------------------------------
@@ -198,6 +254,14 @@ module "git-config" {
   agent_id = coder_agent.main.id
 }
 
+module "github-upload-public-key" {
+  count            = local.github_external_auth_id != null ? data.coder_workspace.me.start_count : 0
+  source           = "registry.coder.com/coder/github-upload-public-key/coder"
+  version          = "~> 1.0"
+  agent_id         = coder_agent.main.id
+  external_auth_id = local.github_external_auth_id
+}
+
 module "git-clone" {
   count    = data.coder_workspace.me.start_count > 0 && data.coder_parameter.git_repo_url.value != "" ? 1 : 0
   source   = "registry.coder.com/coder/git-clone/coder"
@@ -205,6 +269,13 @@ module "git-clone" {
   agent_id = coder_agent.main.id
   url      = data.coder_parameter.git_repo_url.value
   base_dir = "${local.home_dir}/Projects"
+}
+
+module "personalize" {
+  count    = data.coder_workspace.me.start_count
+  source   = "registry.coder.com/coder/personalize/coder"
+  version  = "~> 1.0"
+  agent_id = coder_agent.main.id
 }
 
 #------------------------------------------------------------------------------
