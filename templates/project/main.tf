@@ -96,10 +96,8 @@ locals {
 # AI TASK
 #------------------------------------------------------------------------------
 
-resource "coder_ai_task" "task" {
-  count  = data.coder_workspace.me.start_count
-  app_id = module.claude-code[count.index].task_app_id
-}
+# Note: coder_ai_task is created by the claude-code module when ai_prompt is set
+# Only one coder_ai_task can exist per template
 
 #------------------------------------------------------------------------------
 # AGENT
@@ -256,14 +254,7 @@ module "code-server" {
   order    = 1
 }
 
-module "cursor" {
-  count    = data.coder_workspace.me.start_count
-  source   = "registry.coder.com/coder/cursor/coder"
-  version  = "~> 1.0"
-  agent_id = coder_agent.main.id
-  folder   = "${local.home_dir}/projects"
-  order    = 2
-}
+
 
 #------------------------------------------------------------------------------
 # MODULES: AI Agents

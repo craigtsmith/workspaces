@@ -181,10 +181,11 @@ resource "coder_env" "openai_api_key" {
 #------------------------------------------------------------------------------
 
 module "dotfiles" {
-  count    = data.coder_workspace.me.start_count
-  source   = "registry.coder.com/coder/dotfiles/coder"
-  version  = "~> 1.0"
-  agent_id = coder_agent.main.id
+  count                = data.coder_workspace.me.start_count
+  source               = "registry.coder.com/coder/dotfiles/coder"
+  version              = "~> 1.0"
+  agent_id             = coder_agent.main.id
+  default_dotfiles_uri = "https://github.com/craigtsmith/dotfiles"
 }
 
 module "git-config" {
@@ -216,14 +217,7 @@ module "code-server" {
   order    = 1
 }
 
-module "cursor" {
-  count    = data.coder_workspace.me.start_count
-  source   = "registry.coder.com/coder/cursor/coder"
-  version  = "~> 1.0"
-  agent_id = coder_agent.main.id
-  folder   = "${local.home_dir}/Projects"
-  order    = 2
-}
+
 
 #------------------------------------------------------------------------------
 # MODULES: AI Agents
