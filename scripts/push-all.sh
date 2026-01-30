@@ -7,6 +7,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 TEMPLATES_DIR="$REPO_ROOT/templates"
 
+if [[ -f "$REPO_ROOT/.envrc" ]]; then
+    set -a
+    # shellcheck disable=SC1090
+    source "$REPO_ROOT/.envrc"
+    set +a
+fi
+
 YES_FLAG=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
