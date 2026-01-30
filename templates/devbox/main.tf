@@ -70,6 +70,9 @@ resource "coder_agent" "main" {
       touch ~/.init_done
     fi
     mkdir -p ~/Projects ~/.claude
+    
+    # Remove oh-my-zsh devcontainer (installed by dotfiles, not wanted)
+    rm -rf ~/.oh-my-zsh/.devcontainer
   EOT
 
   shutdown_script = <<-EOT
@@ -215,6 +218,15 @@ module "code-server" {
   agent_id = coder_agent.main.id
   folder   = "${local.home_dir}/Projects"
   order    = 1
+}
+
+module "cursor" {
+  count    = data.coder_workspace.me.start_count
+  source   = "registry.coder.com/coder/cursor/coder"
+  version  = "~> 1.0"
+  agent_id = coder_agent.main.id
+  folder   = "${local.home_dir}/Projects"
+  order    = 2
 }
 
 
