@@ -22,13 +22,63 @@ data "coder_external_auth" "github" {
   id    = "github"
 }
 
+#------------------------------------------------------------------------------
+# VARIABLES (push-time secrets - NOT exposed as parameters)
+#------------------------------------------------------------------------------
+
+variable "anthropic_api_key" {
+  type        = string
+  description = "Anthropic API key for Claude Code"
+  default     = ""
+  sensitive   = true
+}
+
+variable "openai_api_key" {
+  type        = string
+  description = "OpenAI API key for Codex"
+  default     = ""
+  sensitive   = true
+}
+
+variable "enable_github_auth" {
+  type        = bool
+  description = "Enable GitHub external auth integration (git-config + SSH key upload)."
+  default     = true
+}
+
+#------------------------------------------------------------------------------
+# PARAMETERS (user-configurable)
+#------------------------------------------------------------------------------
+
+data "coder_parameter" "dotfiles_url" {
+  type         = "string"
+  name         = "dotfiles_url"
+  display_name = "Dotfiles Repository"
+  description  = "Git URL for your dotfiles (uses GNU Stow)"
+  default      = ""
+  mutable      = true
+  order        = 1
+}
+
+data "coder_parameter" "repo_url" {
+  type         = "string"
+  name         = "repo_url"
+  display_name = "Project Repository"
+  description  = "Git repository to clone (optional)"
+  default      = ""
+  mutable      = true
+  order        = 2
+}
+
+#------------------------------------------------------------------------------
+# LOCALS
+#------------------------------------------------------------------------------
+
 locals {
   username                = data.coder_workspace_owner.me.name
   home_dir                = "/home/coder"
-  anthropic_api_key_param = trimspace(data.coder_parameter.anthropic_api_key.value)
-  openai_api_key_param    = trimspace(data.coder_parameter.openai_api_key.value)
-  anthropic_api_key       = local.anthropic_api_key_param != "" ? local.anthropic_api_key_param : trimspace(var.anthropic_api_key)
-  openai_api_key          = local.openai_api_key_param != "" ? local.openai_api_key_param : trimspace(var.openai_api_key)
+  anthropic_api_key       = trimspace(var.anthropic_api_key)
+  openai_api_key          = trimspace(var.openai_api_key)
   github_external_auth_id = try(data.coder_external_auth.github[0].id, null)
 
   agent_metadata = [
@@ -89,61 +139,6 @@ locals {
 }
 
 #------------------------------------------------------------------------------
-# VARIABLES (API Keys)
-#------------------------------------------------------------------------------
-
-variable "anthropic_api_key" {
-  type        = string
-  description = "Anthropic API key for Claude Code"
-  default     = ""
-  sensitive   = true
-}
-
-variable "openai_api_key" {
-  type        = string
-  description = "OpenAI API key for Codex"
-  default     = ""
-  sensitive   = true
-}
-
-variable "enable_github_auth" {
-  type        = bool
-  description = "Enable GitHub external auth integration (git-config + SSH key upload)."
-  default     = true
-}
-
-#------------------------------------------------------------------------------
-# PARAMETERS
-#------------------------------------------------------------------------------
-
-data "coder_parameter" "git_repo_url" {
-  type         = "string"
-  name         = "git_repo_url"
-  display_name = "Git Repository URL"
-  description  = "Repository to clone into ~/Projects (optional)"
-  default      = ""
-  mutable      = true
-}
-
-data "coder_parameter" "anthropic_api_key" {
-  type         = "string"
-  name         = "anthropic_api_key"
-  display_name = "Anthropic API key"
-  description  = "Override the push-time value (optional)"
-  default      = var.anthropic_api_key
-  mutable      = true
-}
-
-data "coder_parameter" "openai_api_key" {
-  type         = "string"
-  name         = "openai_api_key"
-  display_name = "OpenAI API key"
-  description  = "Override the push-time value (optional)"
-  default      = var.openai_api_key
-  mutable      = true
-}
-
-#------------------------------------------------------------------------------
 # AGENT
 #------------------------------------------------------------------------------
 
@@ -156,23 +151,16 @@ resource "coder_agent" "main" {
     set -e
     # Initialize home from skeleton on first run
     if [ ! -f ~/.init_done ]; then
-      cp -rT /etc/skel ~
+      cp -rT /etc/skel ~ || true
       touch ~/.init_done
     fi
     mkdir -p ~/Projects ~/.claude
 
-    # Remove oh-my-zsh devcontainer (installed by dotfiles, not wanted)
-    rm -rf ~/.oh-my-zsh/.devcontainer
-
-    if ! command -v zsh >/dev/null 2>&1; then
-      sudo apt-get update -y
-      sudo apt-get install -y zsh
-    fi
-
+    # Set zsh as default shell if available
     if command -v zsh >/dev/null 2>&1; then
       zsh_path="$(command -v zsh)"
       if [ "$SHELL" != "$zsh_path" ]; then
-        chsh -s "$zsh_path" "$USER" || sudo chsh -s "$zsh_path" "$USER" || sudo usermod -s "$zsh_path" "$USER" || true
+        sudo chsh -s "$zsh_path" "$USER" || true
       fi
     fi
 
@@ -182,11 +170,6 @@ ${file("${path.module}/personalize")}
 PERSONALIZE
       chmod +x ~/personalize
     fi
-  EOT
-
-  shutdown_script = <<-EOT
-    docker system prune -a -f || true
-    sudo service docker stop || true
   EOT
 
   env = {
@@ -209,19 +192,6 @@ PERSONALIZE
 }
 
 #------------------------------------------------------------------------------
-# SCRIPTS
-#------------------------------------------------------------------------------
-
-resource "coder_script" "docker_init" {
-  count        = data.coder_workspace.me.start_count
-  agent_id     = coder_agent.main.id
-  display_name = "Start Docker"
-  run_on_start = true
-  icon         = "/icon/docker.svg"
-  script       = "sudo service docker start"
-}
-
-#------------------------------------------------------------------------------
 # API KEY INJECTION
 #------------------------------------------------------------------------------
 
@@ -240,15 +210,15 @@ resource "coder_env" "openai_api_key" {
 }
 
 #------------------------------------------------------------------------------
-# MODULES: Dotfiles & Git
+# MODULES: Dotfiles & Git (sequential ordering via depends_on)
 #------------------------------------------------------------------------------
 
 module "dotfiles" {
-  count                = data.coder_workspace.me.start_count
-  source               = "registry.coder.com/coder/dotfiles/coder"
-  version              = "~> 1.0"
-  agent_id             = coder_agent.main.id
-  default_dotfiles_uri = "https://github.com/craigtsmith/dotfiles"
+  count        = data.coder_workspace.me.start_count > 0 && data.coder_parameter.dotfiles_url.value != "" ? 1 : 0
+  source       = "registry.coder.com/coder/dotfiles/coder"
+  version      = "~> 1.0"
+  agent_id     = coder_agent.main.id
+  dotfiles_uri = data.coder_parameter.dotfiles_url.value
 }
 
 module "git-config" {
@@ -267,17 +237,28 @@ module "github-upload-public-key" {
 }
 
 module "git-clone" {
-  count    = data.coder_workspace.me.start_count > 0 && data.coder_parameter.git_repo_url.value != "" ? 1 : 0
+  count    = data.coder_workspace.me.start_count > 0 && data.coder_parameter.repo_url.value != "" ? 1 : 0
   source   = "registry.coder.com/coder/git-clone/coder"
   version  = "~> 1.0"
   agent_id = coder_agent.main.id
-  url      = data.coder_parameter.git_repo_url.value
+  url      = data.coder_parameter.repo_url.value
   base_dir = "${local.home_dir}/Projects"
 }
 
 module "personalize" {
   count    = data.coder_workspace.me.start_count
   source   = "registry.coder.com/coder/personalize/coder"
+  version  = "~> 1.0"
+  agent_id = coder_agent.main.id
+}
+
+#------------------------------------------------------------------------------
+# MODULES: Devcontainers (install CLI only, no auto-loading)
+#------------------------------------------------------------------------------
+
+module "devcontainers-cli" {
+  count    = data.coder_workspace.me.start_count
+  source   = "registry.coder.com/coder/devcontainers-cli/coder"
   version  = "~> 1.0"
   agent_id = coder_agent.main.id
 }
@@ -303,8 +284,6 @@ module "cursor" {
   folder   = "${local.home_dir}/Projects"
   order    = 2
 }
-
-
 
 #------------------------------------------------------------------------------
 # MODULES: AI Agents
@@ -345,6 +324,14 @@ module "codex" {
 # DOCKER RESOURCES
 #------------------------------------------------------------------------------
 
+resource "docker_image" "golden" {
+  name = "coder-golden:latest"
+  build {
+    context    = "${path.module}/../shared/build"
+    dockerfile = "Dockerfile"
+  }
+}
+
 resource "docker_volume" "home" {
   name = "coder-${data.coder_workspace.me.id}-home"
   lifecycle {
@@ -352,19 +339,25 @@ resource "docker_volume" "home" {
   }
 }
 
-resource "docker_volume" "docker" {
-  name = "coder-${data.coder_workspace.me.id}-docker"
+resource "docker_volume" "nvm_cache" {
+  name = "coder-${data.coder_workspace.me.id}-nvm"
+  lifecycle {
+    ignore_changes = all
+  }
+}
+
+resource "docker_volume" "uv_cache" {
+  name = "coder-${data.coder_workspace.me.id}-uv"
   lifecycle {
     ignore_changes = all
   }
 }
 
 resource "docker_container" "workspace" {
-  count      = data.coder_workspace.me.start_count
-  image      = "codercom/enterprise-node:ubuntu"
-  name       = "coder-${data.coder_workspace_owner.me.name}-${lower(data.coder_workspace.me.name)}"
-  hostname   = data.coder_workspace.me.name
-  privileged = true
+  count    = data.coder_workspace.me.start_count
+  image    = docker_image.golden.image_id
+  name     = "coder-${data.coder_workspace_owner.me.name}-${lower(data.coder_workspace.me.name)}"
+  hostname = data.coder_workspace.me.name
 
   entrypoint = ["sh", "-c", replace(coder_agent.main.init_script, "/localhost|127\\.0\\.0\\.1/", "host.docker.internal")]
   env = compact([
@@ -385,8 +378,14 @@ resource "docker_container" "workspace" {
   }
 
   volumes {
-    container_path = "/var/lib/docker"
-    volume_name    = docker_volume.docker.name
+    container_path = "/home/coder/.nvm"
+    volume_name    = docker_volume.nvm_cache.name
+    read_only      = false
+  }
+
+  volumes {
+    container_path = "/home/coder/.cache/uv"
+    volume_name    = docker_volume.uv_cache.name
     read_only      = false
   }
 }
