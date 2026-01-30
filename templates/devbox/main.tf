@@ -25,8 +25,10 @@ data "coder_external_auth" "github" {
 locals {
   username                = data.coder_workspace_owner.me.name
   home_dir                = "/home/coder"
-  anthropic_api_key       = trimspace(data.coder_parameter.anthropic_api_key.value)
-  openai_api_key          = trimspace(data.coder_parameter.openai_api_key.value)
+  anthropic_api_key_param = trimspace(data.coder_parameter.anthropic_api_key.value)
+  openai_api_key_param    = trimspace(data.coder_parameter.openai_api_key.value)
+  anthropic_api_key       = local.anthropic_api_key_param != "" ? local.anthropic_api_key_param : trimspace(var.anthropic_api_key)
+  openai_api_key          = local.openai_api_key_param != "" ? local.openai_api_key_param : trimspace(var.openai_api_key)
   github_external_auth_id = try(data.coder_external_auth.github[0].id, null)
 
   agent_metadata = [
@@ -167,12 +169,20 @@ resource "coder_agent" "main" {
       sudo apt-get install -y zsh
     fi
 
+    if command -v zsh >/dev/null 2>&1; then
+      zsh_path="$(command -v zsh)"
+      if [ "$SHELL" != "$zsh_path" ]; then
+        chsh -s "$zsh_path" "$USER" || sudo chsh -s "$zsh_path" "$USER" || sudo usermod -s "$zsh_path" "$USER" || true
+      fi
+    fi
+
     if [ ! -f ~/personalize ]; then
       cat <<'PERSONALIZE' > ~/personalize
 #!/usr/bin/env bash
 if command -v zsh >/dev/null 2>&1; then
-  if [ "$SHELL" != "$(command -v zsh)" ]; then
-    chsh -s "$(command -v zsh)" "$USER" || sudo chsh -s "$(command -v zsh)" "$USER" || true
+  zsh_path="$(command -v zsh)"
+  if [ "$SHELL" != "$zsh_path" ]; then
+    chsh -s "$zsh_path" "$USER" || sudo chsh -s "$zsh_path" "$USER" || sudo usermod -s "$zsh_path" "$USER" || true
   fi
 fi
 PERSONALIZE
@@ -360,7 +370,11 @@ resource "docker_container" "workspace" {
   privileged = true
 
   entrypoint = ["sh", "-c", replace(coder_agent.main.init_script, "/localhost|127\\.0\\.0\\.1/", "host.docker.internal")]
-  env        = ["CODER_AGENT_TOKEN=${coder_agent.main.token}"]
+  env = compact([
+    "CODER_AGENT_TOKEN=${coder_agent.main.token}",
+    local.anthropic_api_key != "" ? "ANTHROPIC_API_KEY=${local.anthropic_api_key}" : "",
+    local.openai_api_key != "" ? "OPENAI_API_KEY=${local.openai_api_key}" : "",
+  ])
 
   host {
     host = "host.docker.internal"
