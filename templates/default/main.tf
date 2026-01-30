@@ -115,8 +115,11 @@ resource "coder_agent" "main" {
   startup_script = <<-EOT
     set -e
 
-    # Ensure Projects directory exists
-    mkdir -p ~/Projects
+    # Fix ownership of mounted volumes (Docker creates them as root)
+    sudo chown -R $(id -u):$(id -g) ~ 2>/dev/null || true
+
+    # Ensure directories exist with correct permissions
+    mkdir -p ~/Projects ~/.claude ~/.local/bin
 
     # Wait for Docker to be available (from sidecar)
     echo "Waiting for Docker to be available..."
