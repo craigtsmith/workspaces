@@ -1,83 +1,133 @@
-# Coder Master Template
+```
+                                    oooo                   
+                                    `888                   
+oooo oooo    ooo  .ooooo.  oooo d8b  888  oooo             
+ `88. `88.  .8'  d88' `88b `888""8P  888 .8P'              
+  `88..]88..8'   888   888  888      888888.               
+   `888'`888'    888   888  888      888 `88b.             
+    `8'  `8'     `Y8bod8P' d888b    o888o o888o            
+ .oooo.o oo.ooooo.   .oooo.    .ooooo.   .ooooo.   .oooo.o 
+d88(  "8  888' `88b `P  )88b  d88' `"Y8 d88' `88b d88(  "8 
+`"Y88b.   888   888  .oP"888  888       888ooo888 `"Y88b.  
+o.  )88b  888   888 d8(  888  888   .o8 888    .o o.  )88b 
+8""888P'  888bod8P' `Y888""8o `Y8bod8P' `Y8bod8P' 8""888P' 
+          888                                              
+         o888o                                             
+                                                           
+```
 
-A comprehensive Docker-based Coder template with Docker-in-Docker support, modern development tooling, and Claude Code integration.
-
-## Features
-
-### Core Infrastructure
-- **Docker-in-Docker (DinD)**: Run containers within your workspace for dev containers and project services
-- **Persistent Storage**: Separate volumes for home directory, projects, Docker data, and Claude config
-- **Resource Management**: Configurable CPU and memory limits
-
-### Development Tools Pre-installed
-- **Node.js**: Latest version via NVM with pnpm support
-- **Bun**: Latest version
-- **Python 3**: With uv package manager
-- **tmux**: Terminal multiplexer
-- **Docker CLI**: For interacting with the DinD sidecar
-
-### IDE Support
-- **code-server**: VS Code in the browser
-- **Cursor**: Desktop IDE integration
-
-### Git Configuration
-- **git-config**: Automatic Git user configuration from Coder identity
-- **git-commit-signing**: SSH-based commit signing
-- **github-upload-public-key**: Automatic SSH key upload to GitHub
-
-### AI Coding
-- **Claude Code**: Full integration
-  - Persistent authentication (survives workspace restarts)
-  - Optional per-workspace API key (use client's key instead of your own)
-
-### Workspace Personalization
-- **Dotfiles**: Apply your own dotfiles repository
-- **Git Clone**: Automatically clone a repository on workspace start
-
-## Parameters
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `git_repo_url` | Git repository to clone into ~/Projects | Empty |
-| `git_repo_branch` | Branch to checkout | Default branch |
-| `claude_api_key` | Your own Anthropic API key (optional) | Empty (uses workspace auth) |
-| `cpu` | CPU cores | 4 |
-| `memory` | RAM in GB | 8 |
+A multi-template repository for managing [Coder](https://coder.com) workspace templates with Docker-based development environments.
 
 ## Directory Structure
 
-All coding happens in `~/Projects/`. When you specify a git repository, it will be cloned there.
-
 ```
-/home/coder/
-├── Projects/           # All your code lives here
-│   └── <repo-name>/    # Auto-cloned if git_repo_url is set
-├── .claude/            # Persistent Claude Code config
-└── ...                 # Home directory (persisted)
+workspaces/
+├── templates/              # Coder templates
+│   └── default/            # Default workspace template
+│       ├── main.tf
+│       └── build/
+├── scripts/                # CLI tooling
+│   ├── list.sh             # List templates
+│   ├── push.sh             # Push single template
+│   ├── push-all.sh         # Push all templates
+│   ├── pull.sh             # Pull from Coder
+│   ├── validate.sh         # Validate configs
+│   ├── fmt.sh              # Format TF files
+│   └── init.sh             # Create new template
+└── shared/
+    └── modules/            # Shared Terraform modules
 ```
 
-## Persistent Volumes
+## Prerequisites
 
-| Volume | Mount Point | Purpose |
-|--------|-------------|---------|
-| `*-home` | `/home/coder` | Home directory |
-| `*-projects` | `/home/coder/Projects` | Project files |
-| `*-docker` | DinD `/var/lib/docker` | Docker images/containers |
-| `*-claude-config` | `/home/coder/.claude` | Claude authentication |
+- [Coder CLI](https://coder.com/docs/cli) - authenticated with `coder login`
+- [OpenTofu](https://opentofu.org/) or [Terraform](https://terraform.io/)
+- [Docker](https://docker.com/) (for building workspace images)
 
-## Using Docker in the Workspace
-
-The workspace connects to a Docker-in-Docker sidecar:
+## Quick Start
 
 ```bash
-docker run -d nginx
-docker compose up -d
-docker build -t my-image .
+# List available templates
+./scripts/list.sh
+
+# Push a template to Coder
+./scripts/push.sh default
+
+# Validate all templates
+./scripts/validate.sh
+
+# Format Terraform files
+./scripts/fmt.sh
 ```
 
-## Deployment
+## Available Templates
+
+| Template | Description |
+|----------|-------------|
+| `default` | Full-featured workspace with DinD, Node.js, Python, Bun, and IDE integrations |
+
+See individual template READMEs in `templates/<name>/README.md` for details.
+
+## Creating a New Template
 
 ```bash
-cd coder-template
-coder templates push
+# Create from scratch
+./scripts/init.sh my-template
+
+# Copy from existing template
+./scripts/init.sh gpu --from default
 ```
+
+Then customize `templates/my-template/main.tf` and push:
+
+```bash
+./scripts/validate.sh my-template
+./scripts/push.sh my-template
+```
+
+## Script Reference
+
+| Script | Description | Usage |
+|--------|-------------|-------|
+| `list.sh` | List available templates | `./scripts/list.sh` |
+| `push.sh` | Push template to Coder | `./scripts/push.sh <name> [--yes]` |
+| `push-all.sh` | Push all templates | `./scripts/push-all.sh [--yes]` |
+| `pull.sh` | Pull template from Coder | `./scripts/pull.sh <name>` |
+| `validate.sh` | Validate Terraform | `./scripts/validate.sh [name]` |
+| `fmt.sh` | Format Terraform files | `./scripts/fmt.sh [--check]` |
+| `init.sh` | Create new template | `./scripts/init.sh <name> [--from <src>]` |
+
+All scripts prefer `tofu` over `terraform` if available.
+
+## CI/CD Integration
+
+Example GitHub Actions workflow:
+
+```yaml
+name: Validate Templates
+
+on:
+  pull_request:
+    paths:
+      - 'templates/**'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: opentofu/setup-opentofu@v1
+
+      - name: Check formatting
+        run: ./scripts/fmt.sh --check
+
+      - name: Validate templates
+        run: ./scripts/validate.sh
+```
+
+## Resources
+
+- [Coder Templates Documentation](https://coder.com/docs/templates)
+- [Coder Module Registry](https://registry.coder.com/)
+- [Terraform Docker Provider](https://registry.terraform.io/providers/kreuzwerker/docker/latest/docs)

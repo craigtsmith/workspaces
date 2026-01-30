@@ -1,40 +1,63 @@
-# AGENTS.md
+# CLAUDE.md
 
-This file provides guidance to agents when working with code in this repository.
+Agent instructions for working with this repository.
 
 ## Project Overview
 
-This is a Coder template that provisions Docker-based development workspaces with Docker-in-Docker support. It creates containerized dev environments with pre-installed tooling (Node.js, Python, Bun) and IDE integrations.
+Multi-template repository for managing Coder workspace templates. Each template provisions Docker-based development environments with customizable tooling.
+
+## Directory Structure
+
+```
+workspaces/
+├── templates/              # Coder templates (each is self-contained)
+│   └── <name>/
+│       ├── main.tf         # Template configuration
+│       ├── build/          # Dockerfile and build context
+│       └── README.md       # Template-specific docs
+├── scripts/                # CLI tooling
+└── shared/modules/         # Shared Terraform modules
+```
 
 ## Commands
 
 ```bash
-# Validate Terraform configuration
-terraform validate
+# List templates
+./scripts/list.sh
 
-# Format Terraform files
-terraform fmt
+# Validate templates
+./scripts/validate.sh           # All templates
+./scripts/validate.sh default   # Single template
 
-# Deploy template to Coder
-coder templates push
+# Format Terraform
+./scripts/fmt.sh                # Format all
+./scripts/fmt.sh --check        # Check only
+
+# Push to Coder
+./scripts/push.sh default       # Single template
+./scripts/push-all.sh           # All templates
+
+# Pull from Coder
+./scripts/pull.sh default
+
+# Create new template
+./scripts/init.sh minimal                   # Empty template
+./scripts/init.sh gpu --from default        # Copy from existing
 ```
 
-## Architecture
+## Template Patterns
 
-**main.tf** - Single Terraform file containing all infrastructure:
-- Workspace parameters (git repo, CPU/memory limits, API keys)
-- Coder agent with startup script and metadata
-- Coder modules from registry (dotfiles, git-clone, code-server, cursor, claude-code)
-- Docker resources: network, volumes (home, projects, docker, claude-config), image build, containers
+- Each template is self-contained in `templates/<name>/`
+- `main.tf` contains all Terraform configuration
+- `build/` contains Dockerfile and build context
+- Modules use `start_count` to only run on workspace start
+- DinD sidecar provides Docker via `tcp://dind-{workspace-id}:2375`
+- Persistent volumes survive workspace restarts
 
-**build/Dockerfile** - Ubuntu 22.04 base image with:
-- Docker CLI (connects to DinD sidecar)
-- Node.js via NVM with pnpm
-- Bun runtime
-- Python 3 with uv package manager
+## Adding a New Template
 
-**Key patterns:**
-- DinD sidecar provides Docker functionality via `tcp://dind-{workspace-id}:2375`
-- Four persistent volumes survive workspace restarts (home, projects, docker data, claude config)
-- Modules use `start_count` to only run on workspace start, not stop
-- Git config pulled from `coder_workspace_owner` data source
+1. Create template: `./scripts/init.sh <name> [--from <source>]`
+2. Edit `templates/<name>/main.tf`
+3. Add `templates/<name>/README.md`
+4. Validate: `./scripts/validate.sh <name>`
+5. Push: `./scripts/push.sh <name>`
