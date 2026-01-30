@@ -208,19 +208,20 @@ module "git-config" {
   agent_id = coder_agent.main.id
 }
 
-module "git-commit-signing" {
-  count    = data.coder_workspace.me.start_count
-  source   = "registry.coder.com/coder/git-commit-signing/coder"
-  version  = "1.0.17"
-  agent_id = coder_agent.main.id
-}
+# TODO: setup external auth https://coder.com/docs/admin/external-auth
+# module "git-commit-signing" {
+#   count    = data.coder_workspace.me.start_count
+#   source   = "registry.coder.com/coder/git-commit-signing/coder"
+#   version  = "1.0.17"
+#   agent_id = coder_agent.main.id
+# }
 
-module "github-upload-public-key" {
-  count    = data.coder_workspace.me.start_count
-  source   = "registry.coder.com/coder/github-upload-public-key/coder"
-  version  = "1.0.18"
-  agent_id = coder_agent.main.id
-}
+# module "github-upload-public-key" {
+#   count    = data.coder_workspace.me.start_count
+#   source   = "registry.coder.com/coder/github-upload-public-key/coder"
+#   version  = "1.0.18"
+#   agent_id = coder_agent.main.id
+# }
 
 #------------------------------------------------------------------------------
 # MODULES: CODE-SERVER (VS Code in Browser)
