@@ -25,7 +25,7 @@ data "coder_external_auth" "github" {
 }
 
 #------------------------------------------------------------------------------
-# VARIABLES (API Keys)
+# VARIABLES (push-time secrets - NOT exposed as parameters)
 #------------------------------------------------------------------------------
 
 variable "anthropic_api_key" {
@@ -49,16 +49,49 @@ variable "enable_github_auth" {
 }
 
 #------------------------------------------------------------------------------
-# PARAMETERS
+# PARAMETERS (user-configurable)
 #------------------------------------------------------------------------------
+
+data "coder_parameter" "dotfiles_url" {
+  type         = "string"
+  name         = "dotfiles_url"
+  display_name = "Dotfiles Repository"
+  description  = "Git URL for your dotfiles (uses GNU Stow)"
+  default      = ""
+  mutable      = true
+  order        = 1
+}
 
 data "coder_parameter" "repo_url" {
   type         = "string"
   name         = "repo_url"
-  display_name = "Git Repository"
-  description  = "Repository to clone (should contain devcontainer.json)"
+  display_name = "Project Repository"
+  description  = "Git repository to clone (required for tasks)"
   mutable      = true
-  order        = 1
+  order        = 2
+}
+
+data "coder_parameter" "ai_agent" {
+  type         = "string"
+  name         = "ai_agent"
+  display_name = "AI Agent"
+  description  = "Select which AI agent to use for this task"
+  default      = "claude"
+  mutable      = false
+  order        = 3
+
+  option {
+    name  = "Claude Code"
+    value = "claude"
+  }
+  option {
+    name  = "OpenAI Codex"
+    value = "codex"
+  }
+  option {
+    name  = "Cursor CLI"
+    value = "cursor_cli"
+  }
 }
 
 data "coder_parameter" "system_prompt" {
@@ -69,25 +102,7 @@ data "coder_parameter" "system_prompt" {
   description  = "System prompt for AI agents"
   default      = "You are a helpful coding assistant."
   mutable      = false
-  order        = 2
-}
-
-data "coder_parameter" "anthropic_api_key" {
-  type         = "string"
-  name         = "anthropic_api_key"
-  display_name = "Anthropic API key"
-  description  = "Override the push-time value (optional)"
-  default      = var.anthropic_api_key
-  mutable      = true
-}
-
-data "coder_parameter" "openai_api_key" {
-  type         = "string"
-  name         = "openai_api_key"
-  display_name = "OpenAI API key"
-  description  = "Override the push-time value (optional)"
-  default      = var.openai_api_key
-  mutable      = true
+  order        = 4
 }
 
 #------------------------------------------------------------------------------
@@ -96,12 +111,15 @@ data "coder_parameter" "openai_api_key" {
 
 locals {
   home_dir                = "/home/coder"
-  anthropic_api_key_param = trimspace(data.coder_parameter.anthropic_api_key.value)
-  openai_api_key_param    = trimspace(data.coder_parameter.openai_api_key.value)
-  anthropic_api_key       = local.anthropic_api_key_param != "" ? local.anthropic_api_key_param : trimspace(var.anthropic_api_key)
-  openai_api_key          = local.openai_api_key_param != "" ? local.openai_api_key_param : trimspace(var.openai_api_key)
+  anthropic_api_key       = trimspace(var.anthropic_api_key)
+  openai_api_key          = trimspace(var.openai_api_key)
   github_external_auth_id = try(data.coder_external_auth.github[0].id, null)
   claude_ai_prompt        = data.coder_task.me.enabled ? trimspace(data.coder_task.me.prompt) : ""
+
+  # AI agent selection flags
+  use_claude = data.coder_parameter.ai_agent.value == "claude"
+  use_codex  = data.coder_parameter.ai_agent.value == "codex"
+  use_cursor = data.coder_parameter.ai_agent.value == "cursor_cli"
 
   agent_metadata = [
     {
@@ -161,13 +179,6 @@ locals {
 }
 
 #------------------------------------------------------------------------------
-# AI TASK
-#------------------------------------------------------------------------------
-
-# Note: coder_ai_task is created by the claude-code module when ai_prompt is set
-# Only one coder_ai_task can exist per template
-
-#------------------------------------------------------------------------------
 # AGENT
 #------------------------------------------------------------------------------
 
@@ -179,23 +190,16 @@ resource "coder_agent" "main" {
   startup_script = <<-EOT
     set -e
     if [ ! -f ~/.init_done ]; then
-      cp -rT /etc/skel ~
+      cp -rT /etc/skel ~ || true
       touch ~/.init_done
     fi
-    mkdir -p ~/projects
+    mkdir -p ~/projects ~/.claude
 
-    # Remove oh-my-zsh devcontainer (installed by dotfiles, not wanted)
-    rm -rf ~/.oh-my-zsh/.devcontainer
-
-    if ! command -v zsh >/dev/null 2>&1; then
-      sudo apt-get update -y
-      sudo apt-get install -y zsh
-    fi
-
+    # Set zsh as default shell if available
     if command -v zsh >/dev/null 2>&1; then
       zsh_path="$(command -v zsh)"
       if [ "$SHELL" != "$zsh_path" ]; then
-        chsh -s "$zsh_path" "$USER" || sudo chsh -s "$zsh_path" "$USER" || sudo usermod -s "$zsh_path" "$USER" || true
+        sudo chsh -s "$zsh_path" "$USER" || true
       fi
     fi
 
@@ -205,11 +209,6 @@ ${file("${path.module}/personalize")}
 PERSONALIZE
       chmod +x ~/personalize
     fi
-  EOT
-
-  shutdown_script = <<-EOT
-    docker system prune -a -f || true
-    sudo service docker stop || true
   EOT
 
   env = {
@@ -266,6 +265,14 @@ resource "coder_env" "openai_api_key" {
 # MODULES: Git
 #------------------------------------------------------------------------------
 
+module "dotfiles" {
+  count        = data.coder_workspace.me.start_count > 0 && data.coder_parameter.dotfiles_url.value != "" ? 1 : 0
+  source       = "registry.coder.com/coder/dotfiles/coder"
+  version      = "~> 1.0"
+  agent_id     = coder_agent.main.id
+  dotfiles_uri = data.coder_parameter.dotfiles_url.value
+}
+
 module "git-config" {
   count    = data.coder_workspace.me.start_count
   source   = "registry.coder.com/coder/git-config/coder"
@@ -282,7 +289,7 @@ module "github-upload-public-key" {
 }
 
 module "git-clone" {
-  count    = data.coder_workspace.me.start_count
+  count    = data.coder_workspace.me.start_count > 0 && data.coder_parameter.repo_url.value != "" ? 1 : 0
   source   = "registry.coder.com/coder/git-clone/coder"
   version  = "~> 1.0"
   agent_id = coder_agent.main.id
@@ -326,42 +333,55 @@ module "cursor" {
   order    = 2
 }
 
-
-
 #------------------------------------------------------------------------------
-# MODULES: AI Agents
+# MODULES: AI Agents (conditional based on dropdown selection)
 #------------------------------------------------------------------------------
 
+# Claude Code - only when ai_agent == "claude"
 module "claude-code" {
-  count          = data.coder_workspace.me.start_count
+  count          = local.use_claude ? data.coder_workspace.me.start_count : 0
   source         = "registry.coder.com/coder/claude-code/coder"
   version        = "~> 4.0"
   agent_id       = coder_agent.main.id
   workdir        = "${local.home_dir}/projects"
   claude_api_key = local.anthropic_api_key
-  ai_prompt      = ""
+  ai_prompt      = local.claude_ai_prompt
   report_tasks   = false
   system_prompt  = data.coder_parameter.system_prompt.value
   order          = 10
 }
 
+# Codex - only when ai_agent == "codex"
+module "codex" {
+  count          = local.use_codex ? data.coder_workspace.me.start_count : 0
+  source         = "registry.coder.com/coder-labs/codex/coder"
+  version        = "~> 1.0"
+  agent_id       = coder_agent.main.id
+  folder         = "${local.home_dir}/projects"
+  openai_api_key = local.openai_api_key
+  order          = 11
+}
+
+# Cursor CLI - only when ai_agent == "cursor_cli"
+# Note: This uses the cursor module which provides desktop app link
+# For true CLI-only usage, a custom script would be needed
+module "cursor-cli" {
+  count    = local.use_cursor ? data.coder_workspace.me.start_count : 0
+  source   = "registry.coder.com/coder/cursor/coder"
+  version  = "~> 1.0"
+  agent_id = coder_agent.main.id
+  folder   = "${local.home_dir}/projects"
+  order    = 12
+}
+
+# Mux - always available for AI agent orchestration
 module "mux" {
   count       = data.coder_workspace.me.start_count
   source      = "registry.coder.com/coder/mux/coder"
   version     = "~> 1.0"
   agent_id    = coder_agent.main.id
   add-project = "${local.home_dir}/projects"
-  order       = 11
-}
-
-module "codex" {
-  count          = data.coder_workspace.me.start_count
-  source         = "registry.coder.com/coder-labs/codex/coder"
-  version        = "~> 1.0"
-  agent_id       = coder_agent.main.id
-  folder         = "${local.home_dir}/projects"
-  openai_api_key = local.openai_api_key
-  order          = 12
+  order       = 13
 }
 
 #------------------------------------------------------------------------------
@@ -369,7 +389,7 @@ module "codex" {
 #------------------------------------------------------------------------------
 
 resource "coder_devcontainer" "project" {
-  count            = data.coder_workspace.me.start_count
+  count            = data.coder_workspace.me.start_count > 0 && length(module.git-clone) > 0 ? 1 : 0
   agent_id         = coder_agent.main.id
   workspace_folder = "${local.home_dir}/projects/${module.git-clone[0].folder_name}"
 }
@@ -378,8 +398,30 @@ resource "coder_devcontainer" "project" {
 # DOCKER RESOURCES
 #------------------------------------------------------------------------------
 
+resource "docker_image" "golden" {
+  name = "coder-golden:latest"
+  build {
+    context    = "${path.module}/build"
+    dockerfile = "Dockerfile"
+  }
+}
+
 resource "docker_volume" "home" {
   name = "coder-${data.coder_workspace.me.id}-home"
+  lifecycle {
+    ignore_changes = all
+  }
+}
+
+resource "docker_volume" "nvm_cache" {
+  name = "coder-${data.coder_workspace.me.id}-nvm"
+  lifecycle {
+    ignore_changes = all
+  }
+}
+
+resource "docker_volume" "uv_cache" {
+  name = "coder-${data.coder_workspace.me.id}-uv"
   lifecycle {
     ignore_changes = all
   }
@@ -394,7 +436,7 @@ resource "docker_volume" "docker" {
 
 resource "docker_container" "workspace" {
   count      = data.coder_workspace.me.start_count
-  image      = "codercom/enterprise-node:ubuntu"
+  image      = docker_image.golden.image_id
   name       = "coder-${data.coder_workspace_owner.me.name}-${lower(data.coder_workspace.me.name)}"
   hostname   = data.coder_workspace.me.name
   privileged = true
@@ -414,6 +456,18 @@ resource "docker_container" "workspace" {
   volumes {
     container_path = "/home/coder"
     volume_name    = docker_volume.home.name
+    read_only      = false
+  }
+
+  volumes {
+    container_path = "/home/coder/.nvm"
+    volume_name    = docker_volume.nvm_cache.name
+    read_only      = false
+  }
+
+  volumes {
+    container_path = "/home/coder/.cache/uv"
+    volume_name    = docker_volume.uv_cache.name
     read_only      = false
   }
 

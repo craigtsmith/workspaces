@@ -17,19 +17,33 @@ Multi-template repository for managing **Coder workspace templates**. Each templ
 ### Directory Structure
 
 ```
-├── templates/              # Coder templates (each is self-contained)
-│   └── <name>/
-│       ├── main.tf         # Template configuration
-│       ├── build/          # Dockerfile and build context
-│       └── README.md       # Template-specific docs
-├── scripts/                # CLI tooling (bash)
-└── shared/modules/         # Shared Terraform modules (future)
+├── templates/
+│   ├── devbox/                 # Full development environment
+│   │   ├── build/
+│   │   │   └── Dockerfile      # Golden Alpine image
+│   │   ├── main.tf
+│   │   ├── personalize
+│   │   └── README.md
+│   └── tasks/                  # AI task runner with agent selection
+│       ├── build/
+│       │   └── Dockerfile      # Golden Alpine image (duplicated)
+│       ├── main.tf
+│       ├── personalize
+│       ├── scripts/
+│       │   └── init-docker-in-docker.sh
+│       └── README.md
+├── scripts/                    # CLI tooling (bash)
 ```
+
+### Templates
+
+- **devbox** — Full development environment with Mux AI agent
+- **tasks** — AI task runner with selectable agent (Claude OR Codex OR Cursor CLI)
 
 ### Important Files
 
+- `templates/<name>/build/Dockerfile` — Golden Alpine image (duplicated per template)
 - `templates/<name>/main.tf` — Primary Terraform config for each template
-- `templates/<name>/build/Dockerfile` — Container image definition
 - `scripts/*.sh` — All CLI operations
 
 ## Essential Commands
@@ -64,10 +78,10 @@ Multi-template repository for managing **Coder workspace templates**. Each templ
 
 - Each template is **self-contained** in `templates/<name>/`
 - `main.tf` contains all Terraform configuration (no splitting)
-- `build/` contains Dockerfile and build context
+- Each template has its own `build/Dockerfile` (duplicated for Coder CLI compatibility)
 - Modules use `start_count` to only run on workspace start
-- DinD sidecar provides Docker via `tcp://dind-{workspace-id}:2375`
-- Persistent volumes survive workspace restarts
+- API keys are push-time variables only (no user override parameters)
+- Persistent volumes survive workspace restarts (home, nvm cache, uv cache)
 
 ### Adding a New Template
 
