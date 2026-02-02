@@ -289,35 +289,13 @@ module "cursor" {
 # MODULES: AI Agents
 #------------------------------------------------------------------------------
 
-module "claude-code" {
-  count               = data.coder_workspace.me.start_count
-  source              = "registry.coder.com/coder/claude-code/coder"
-  version             = "~> 4.0"
-  agent_id            = coder_agent.main.id
-  workdir             = "${local.home_dir}/Projects"
-  claude_api_key      = local.anthropic_api_key
-  report_tasks        = false
-  install_claude_code = true
-  order               = 3
-}
-
 module "mux" {
   count       = data.coder_workspace.me.start_count
   source      = "registry.coder.com/coder/mux/coder"
   version     = "~> 1.0"
   agent_id    = coder_agent.main.id
   add-project = "${local.home_dir}/Projects"
-  order       = 4
-}
-
-module "codex" {
-  count          = data.coder_workspace.me.start_count
-  source         = "registry.coder.com/coder-labs/codex/coder"
-  version        = "~> 1.0"
-  agent_id       = coder_agent.main.id
-  folder         = "${local.home_dir}/Projects"
-  openai_api_key = local.openai_api_key
-  order          = 5
+  order       = 3
 }
 
 #------------------------------------------------------------------------------
@@ -327,7 +305,7 @@ module "codex" {
 resource "docker_image" "golden" {
   name = "coder-golden:latest"
   build {
-    context    = "${path.module}/../shared/build"
+    context    = "${path.module}/build"
     dockerfile = "Dockerfile"
   }
 }

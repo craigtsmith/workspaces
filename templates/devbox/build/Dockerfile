@@ -28,7 +28,7 @@ RUN apk add --no-cache \
     zsh
 
 # Create user with sudo access
-RUN useradd -m -s /bin/zsh -u ${UID} ${USER} \
+RUN adduser -D -s /bin/zsh -u ${UID} ${USER} \
     && echo "${USER} ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/${USER}
 
 USER ${USER}

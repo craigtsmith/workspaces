@@ -401,7 +401,7 @@ resource "coder_devcontainer" "project" {
 resource "docker_image" "golden" {
   name = "coder-golden:latest"
   build {
-    context    = "${path.module}/../shared/build"
+    context    = "${path.module}/build"
     dockerfile = "Dockerfile"
   }
 }
