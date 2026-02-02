@@ -78,12 +78,7 @@ echo "Using DNS IP: $dns_ip"
 # Install dnsmasq to provide custom DNS resolution. This lightweight DNS
 # server allows us to override specific hostname lookups without affecting
 # other DNS queries.
-if command -v apk >/dev/null 2>&1; then
-	sudo apk add --no-cache dnsmasq
-else
-	sudo apt-get update -y
-	sudo apt-get install -y dnsmasq
-fi
+sudo apk add --no-cache dnsmasq
 
 # Configure dnsmasq to resolve host.docker.internal to this workspace's IP.
 # This ensures devcontainers can find the Coder server even when the "docker0"
