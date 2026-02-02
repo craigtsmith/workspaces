@@ -389,7 +389,7 @@ module "mux" {
 #------------------------------------------------------------------------------
 
 resource "coder_devcontainer" "project" {
-  count            = data.coder_workspace.me.start_count
+  count            = data.coder_workspace.me.start_count > 0 && length(module.git-clone) > 0 ? 1 : 0
   agent_id         = coder_agent.main.id
   workspace_folder = "${local.home_dir}/projects/${module.git-clone[0].folder_name}"
 }
