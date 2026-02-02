@@ -289,7 +289,7 @@ module "github-upload-public-key" {
 }
 
 module "git-clone" {
-  count    = data.coder_workspace.me.start_count
+  count    = data.coder_workspace.me.start_count > 0 && data.coder_parameter.repo_url.value != "" ? 1 : 0
   source   = "registry.coder.com/coder/git-clone/coder"
   version  = "~> 1.0"
   agent_id = coder_agent.main.id
